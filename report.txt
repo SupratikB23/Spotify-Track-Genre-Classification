@@ -1,0 +1,71 @@
+======================================================================
+BRAIN MRI TUMOR CLASSIFICATION - APPROACH REPORT
+DSC Club Hackathon, NIST University
+======================================================================
+
+OBJECTIVE
+---------
+Multi-class classification of brain MRI scans into 4 categories:
+  glioma_tumor, meningioma_tumor, pituitary_tumor, no_tumor.
+
+DATASET
+-------
+  Training images : 2007
+  Test images     : 863
+  Format          : PNG, grayscale MRI scans, varying resolutions
+  Class imbalance : ~70% tumor classes, ~30% no_tumor
+
+METHODOLOGY
+-----------
+1. Label Extraction
+   - Labels parsed from filenames by matching known class suffixes
+   - e.g. 00001_gg (399)_glioma_tumor.png -> glioma_tumor
+
+2. Preprocessing
+   - All images resized to 128x128 pixels
+   - Converted to grayscale and normalized to [0, 1]
+
+3. Feature Engineering - HOG + LBP Fusion
+   HOG (Histogram of Oriented Gradients):
+   - 9 orientations, 8x8 pixels/cell, 2x2 cells/block, L2-Hys norm
+   - Captures edge/shape structure critical for MRI classification
+   LBP (Local Binary Pattern) grid:
+   - P=8, R=1, uniform method over a 4x4 spatial grid
+   - Captures local texture patterns complementary to HOG
+   - Combined feature vector: HOG + LBP = 8260 dims
+
+4. Data Augmentation
+   - Horizontal flip applied to all training images
+   - Augmented samples added only to training split (not validation)
+   - Effective training size: 1605 original -> 3210 (original + flipped)
+   - Final model trained on 4014 samples (all 2007 + 2007 flipped)
+
+5. Dimensionality Reduction - PCA
+   - StandardScaler applied before PCA (required for SVM)
+   - PCA retains top 300 principal components
+   - Explained variance retained: 69.54%
+
+6. Class Imbalance Handling
+   - class_weight="balanced" applied to SVM
+   - Stratified train/validation split (80/20)
+
+7. Model Selection - GridSearchCV
+   - SVM with RBF kernel tuned via 5-fold stratified CV
+   - Search space: C in {1, 10, 50, 100}, gamma in {scale, auto, 0.001, 0.005}
+   - Best params: C=10, gamma=scale
+   - Model: SVM_RBF_tuned
+
+RESULTS (Validation Set - 402 original images)
+-----------------------------------------------
+  Accuracy  : 0.9129
+  Precision : 0.9126  (weighted)
+  F1 Score  : 0.9124  (weighted)
+
+DELIVERABLES
+------------
+  brain_mri_classifier.ipynb - this notebook
+  brain_mri_model.joblib     - trained model pipeline
+  submission.csv             - 863-row prediction file
+  report.txt                 - this report
+
+======================================================================
