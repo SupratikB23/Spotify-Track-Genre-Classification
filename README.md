@@ -1,20 +1,20 @@
-# Brain MRI Tumor Classification 
-> *Multi-class classification using HOG + LBP feature fusion with SVM*
+# Decode the Beat: Spotify Genre Classification 
+> *Advanced Multi-Class Classification Workflow using Class-Balanced Voting Ensemble*
 
 ---
 
 ## Objective
 
-Classify brain MRI scans into **one of four categories** using classical machine learning  (without any deep learning or pre-trained models) <br>
+Build a robust machine learning classification model to accurately predict the **`track_genre`** of Spotify songs based on distinct audio features and metadata (without AutoML tools, external APIs, or pre-trained models).
 
-**Brain Tumor** — [Kaggle Hackathon Link](https://www.kaggle.com/competitions/datasprint)
+**DataSprint - Data Science Club, NIST University** — [Kaggle Hackathon Link](https://www.kaggle.com/competitions/spotify-track-genre-classification-challenge)
 
-| Class | Description |
+| Attributes | Description |
 |---|---|
-| `glioma_tumor` | MRI scans showing glioma tumors |
-| `meningioma_tumor` | MRI scans showing meningioma tumors |
-| `pituitary_tumor` | MRI scans showing pituitary tumors |
-| `no_tumor` | MRI scans of healthy brains |
+| `track_genre` | Target categorical variable (e.g., pop, rock, classical) |
+| `danceability`, `energy`, `tempo` | Core acoustic and rhythmic features |
+| `acousticness`, `liveness`, `valence` | Tonal and mood indicators |
+| `duration_ms`, `time_signature` | Track structural and length data |
 
 ---
 
@@ -22,115 +22,66 @@ Classify brain MRI scans into **one of four categories** using classical machine
 
 | Metric | Value |
 |---|---|
-| Training images | **2,007** (across 4 classes) |
-| Test images | **863** (unlabeled, flat folder) |
-| Format | Grayscale PNG / JPG, varying resolutions |
-| Class balance | ~70% tumor classes, ~30% no_tumor |
+| Training tracks | **84,800** |
+| Test tracks | **34,200** (unlabeled flat `test.csv`) |
+| Format | `.csv` (Tabular numeric and categorical data) |
 
-> **Imbalanced dataset** - tumor classes make up ~70% of training data, with varying distribution across glioma, meningioma, and pituitary types. Labels are embedded directly in filenames (e.g. `00001_image(45)_glioma_tumor.png`).
+> **Features Overview**: The datasets (`train.csv`, `test.csv`) contain numerous acoustic vectors representing the track's sound profile alongside entity metadata (e.g., `artists`). The target `track_genre` is only present in the train split.
 
 ---
 
 ## Methodology
 
-### Step 1 - Label Extraction from Filenames
+### Step 1 - Preprocessing
+- Missing numeric and categorical data were handled independently utilizing median/mode-based imputation.
+- Executed **Frequency Encoding** explicitly targeting the `artists` feature.
+- **Normalization:** Applied `StandardScaler` to ensure features contributed uniformly across internal distance metrics and split criteria.
 
-Labels were parsed directly from filenames by matching known class suffixes. No separate label file was required.
+### Step 2 - Feature Engineering: Acoustic Intersections
+Derived meaningful new dimensions from raw inputs to amplify predictive signals.
 
-```
-00001_gg(399)_glioma_tumor.png  →  glioma_tumor
-```
+- Synthesized interaction terms representing acoustic dynamics (e.g., `energy_x_danceability`).
+- Identified `mood_divergence` metrics through overlapping feature spaces.
 
-### Step 2 - Preprocessing
+> Enhancing the base dimensional space allowed tree-based algorithms to discover richer splits early in their decision paths.
 
-- All images **resized to 128×128 pixels**
-- Converted to **grayscale**
-- **Normalized to [0, 1]** for consistent feature extraction
+### Step 3 - Model Architecture: Voting Ensemble Setup
+Tackled complex, overlapping music genre clusters by developing a **Class-Balanced Voting Ensemble**, leveraging complementary tree structures.
 
-### Step 3 - Feature Engineering: HOG + LBP Fusion
+**LightGBM (Gradient Boosting)** -> efficiently fits deep non-linear gradients to accurately identify dense clusters.
+**Extra Trees (Extremely Randomized Trees)** -> mitigates overfitting by introducing extreme variance during feature partitioning.
 
-Two complementary feature descriptors were combined into a single **8,260-dimensional feature vector**.
+> Ensemble voting captures both deep contextual gradient boundaries and generalized random boundaries for stable, generalized performance.
 
-**HOG (Histogram of Oriented Gradients)** -> captures edge and shape structure
-- 9 orientations
-- 8×8 pixels per cell
-- 2×2 cells per block
-- L2-Hys normalization
+### Step 4 - Validation: Out-of-Fold (OOF) 
 
-**LBP (Local Binary Pattern)** - captures local texture patterns
-- P=8, R=1, uniform method
-- Applied over a 4×4 spatial grid
-
-> HOG and LBP are *complementary* -> HOG captures global shape/edge structure while LBP captures fine-grained local texture. Their fusion produces a richer feature representation for MRI classification.
-
-**Combined feature vector: HOG + LBP = 8,260 dims**
-
-### Step 4 - Data Augmentation
-
-Horizontal flips were applied to **training images only** (not validation), doubling the effective training size.
-
-| Stage | Count |
-|---|---|
-| Original train split | 1,605 |
-| After horizontal flip | 3,210 |
-| **Final (all 2,007 + 2,007 flipped)** | **4,014 samples** |
-
-### Step 5 - Dimensionality Reduction: PCA
-
-- `StandardScaler` applied before PCA *(required for SVM)*
-- Top **300 principal components** retained
-- **Explained variance retained: 69.54%**
-
-> Reduces the 8,260-dim feature space significantly while preserving the most discriminative structure, speeding up SVM training without sacrificing meaningful signal.
-
-### Step 6 - Class Imbalance Handling
-
-- `class_weight="balanced"` applied to SVM -> penalizes minority class misclassifications proportionally
-- **Stratified 80/20 train/validation split** -> ensures equal class representation across both sets
-
-### Step 7 - Model Selection: SVM with GridSearchCV
-
-SVM with RBF kernel tuned via **5-fold stratified cross-validation**.
-
-**Search space:**
-
-| Hyperparameter | Values searched |
-|---|---|
-| C | {1, 10, 50, 100} |
-| gamma | {scale, auto, 0.001, 0.005} |
-
-**Best parameters found:**
-
-| Hyperparameter | Best value |
-|---|---|
-| C | **10** |
-| gamma | **scale** |
-
-> **Final model: SVM · RBF kernel · C=10 · gamma=scale**
+Adopted a robust Cross-Validation architecture avoiding traditional validation holdouts. 
+Stratified Out-of-Fold logic evaluated metrics over the entire dataset, serving as a highly reliable generalized estimator for the unseen 34,200 test tracks.
 
 ---
 
 ## Results
 
-*Evaluated on validation set - 402 original held-out images*
+*Evaluated across the entire dataset via Out-of-Fold (OOF) validation strategy*
 
 | Metric | Score |
 |---|---|
-| **Accuracy** | **0.9129** |
-| **Precision** *(weighted)* | **0.9126** |
-| **F1 Score** *(weighted)* | **0.9124** |
+| **Accuracy Assessment** | **0.3321** |
+| **Precision Aggregate** | **0.3291** |
+| **F1 Score Evaluation** | **0.3276** |
 
 ---
 
 ## Repository Structure
 ```
-Brain MRI Tumor Classification
+Spotify Track Genre Classification
 ├── NOTICE
 ├── LICENSE 
-├── README.md 
-├── report.txt                              -> Whole Approach Report
-├── submission.csv                          -> 863-row prediction file with `image_id` and `label` columns
-└── brain-mri-tumor-classification.ipynb    -> Full notebook - preprocessing, feature extraction, training, and evaluation
+├── README.md                               -> High-level summary (This file)
+├── data/                                   -> Provided datasets (`train.csv`, `test.csv`)
+├── report.txt                              -> Detailed approach and methodology report
+├── submission.csv                          -> Final Kaggle prediction submission (34,200 rows)
+└── track_genre_classification.ipynb        -> Full Jupyter Notebook - preprocessing, training, evaluation
 ```
 
 ---
